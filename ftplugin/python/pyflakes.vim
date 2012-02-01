@@ -33,6 +33,22 @@ if !exists('g:pyflakes_use_quickfix')
     let g:pyflakes_use_quickfix = 1
 endif
 
+if !exists('g:pyflakes_use_signs')
+    let g:pyflakes_use_signs = 1
+endif
+
+if !exists('g:pyflakes_highlight_errors')
+    let g:pyflakes_highlight_errors = 1
+endif
+
+if g:pyflakes_use_signs == 1
+    " DESC: Signs definition
+    sign define W text=WW texthl=Todo
+    sign define C text=CC texthl=Comment
+    sign define R text=RR texthl=Visual
+    sign define E text=EE texthl=Error
+endif
+
 
     python << EOF
 import vim
@@ -69,6 +85,9 @@ class blackhole(object):
 def check(buffer):
     filename = buffer.name
     contents = buffer[:]
+
+    # remove any signs 
+    vim.command('sign unplace *')
 
     # shebang usually found at the top of the file, followed by source code encoding marker.
     # assume everything else that follows is encoded in the encoding.
@@ -236,6 +255,8 @@ if !exists("*s:RunPyflakes")
         let b:qf_window_count = -1
         
         python << EOF
+highlight_errors = vim.eval('g:pyflakes_highlight_errors')
+
 for w in check(vim.current.buffer):
     vim.command('let s:matchDict = {}')
     vim.command("let s:matchDict['lineNum'] = " + str(w.lineno))
@@ -252,10 +273,12 @@ for w in check(vim.current.buffer):
     if getattr(w, 'col', None) is None or isinstance(w, SyntaxError):
         # without column information, just highlight the whole line
         # (minus the newline)
-        vim.command(r"let s:mID = matchadd('PyFlakes', '\%" + str(w.lineno) + r"l\n\@!')")
+        if highlight_errors == 1:
+            vim.command(r"let s:mID = matchadd('PyFlakes', '\%" + str(w.lineno) + r"l\n\@!')")
     else:
-        # with a column number, highlight the first keyword there
-        vim.command(r"let s:mID = matchadd('PyFlakes', '^\%" + str(w.lineno) + r"l\_.\{-}\zs\k\+\k\@!\%>" + str(w.col) + r"c')")
+        if highlight_errors == 1:
+            # with a column number, highlight the first keyword there
+            vim.command(r"let s:mID = matchadd('PyFlakes', '^\%" + str(w.lineno) + r"l\_.\{-}\zs\k\+\k\@!\%>" + str(w.col) + r"c')")
 
         vim.command("let l:qf_item.vcol = 1")
         vim.command("let l:qf_item.col = %s" % str(w.col + 1))
@@ -273,6 +296,12 @@ EOF
                 call setqflist(b:qf_list, '')
                 let s:pyflakes_qf = s:GetQuickFixStackCount()
             endif
+        endif
+
+        if g:pyflakes_use_signs == 1
+            for item in filter(getqflist(), 'v:val.bufnr != ""')
+                execute printf('sign place 1 line=%d name=%s buffer=%d', item.lnum, item.type, item.bufnr)
+            endfor
         endif
 
         let b:cleared = 0
